@@ -1,4 +1,4 @@
-// signup_screen.dart - updated
+// signup_screen.dart - updated without name field
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/auth_service.dart';
@@ -14,7 +14,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final _usernameCtrl = TextEditingController();
-  final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
@@ -27,7 +26,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
   @override
   void dispose() {
     _usernameCtrl.dispose();
-    _nameCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     _confirmCtrl.dispose();
@@ -46,7 +44,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     try {
       await _auth.signUp(
         username: _usernameCtrl.text.trim(),
-        name: _nameCtrl.text.trim(),
+        name: _usernameCtrl.text.trim(), // Use username as display name
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text,
       );
@@ -116,20 +114,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       if (v.trim().length < 3) {
                         return 'Username must be at least 3 characters';
                       }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Full name',
-                      prefixIcon: Icon(Icons.person_outline),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'Enter your name';
+                      if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(v.trim())) {
+                        return 'Username can only contain letters, numbers, and underscores';
                       }
                       return null;
                     },

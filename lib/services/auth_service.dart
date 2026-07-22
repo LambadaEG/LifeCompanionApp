@@ -1,4 +1,4 @@
-// auth_service.dart - updated
+// auth_service.dart - updated signUp method
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -70,12 +70,13 @@ class AuthService {
       password: password,
     );
 
-    await cred.user?.updateDisplayName(name.trim());
+    // Use username as display name
+    await cred.user?.updateDisplayName(username.trim());
 
-    // Create a matching user profile document in Firestore.
+    // Create a matching user profile document in Firestore
     await _db.collection('users').doc(cred.user!.uid).set({
       'username': username.trim(),
-      'name': name.trim(),
+      'name': username.trim(), // Store username as name too
       'email': email.trim(),
       'createdAt': FieldValue.serverTimestamp(),
     });
