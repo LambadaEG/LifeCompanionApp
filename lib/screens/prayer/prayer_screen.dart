@@ -1,3 +1,4 @@
+// prayer_screen.dart - with proper mutually exclusive toggling
 import 'package:adhan_dart/adhan_dart.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -117,23 +118,33 @@ class _PrayerScreenState extends State<PrayerScreen> {
     String prayerKey, {
     bool? onTime,
     bool? delayed,
+    bool? inMosque,
   }) async {
     final prayerData = <String, dynamic>{};
 
-    if (onTime != null) {
-      prayerData['onTime'] = onTime;
-
-      if (onTime) {
-        prayerData['delayed'] = false;
-      }
-    }
-
-    if (delayed != null) {
-      prayerData['delayed'] = delayed;
-
-      if (delayed) {
-        prayerData['onTime'] = false;
-      }
+    // If inMosque is true, it takes precedence - uncheck others
+    if (inMosque == true) {
+      prayerData['inMosque'] = true;
+      prayerData['onTime'] = false;
+      prayerData['delayed'] = false;
+    } 
+    // If onTime is true, it takes precedence - uncheck others
+    else if (onTime == true) {
+      prayerData['onTime'] = true;
+      prayerData['delayed'] = false;
+      prayerData['inMosque'] = false;
+    } 
+    // If delayed is true, it takes precedence - uncheck others
+    else if (delayed == true) {
+      prayerData['delayed'] = true;
+      prayerData['onTime'] = false;
+      prayerData['inMosque'] = false;
+    } 
+    // If all are false (checkbox was unchecked), mark as missed
+    else {
+      prayerData['onTime'] = false;
+      prayerData['delayed'] = false;
+      prayerData['inMosque'] = false;
     }
 
     final update = <String, dynamic>{
@@ -286,7 +297,10 @@ class _PrayerScreenState extends State<PrayerScreen> {
                                       label: Text('Time'),
                                     ),
                                     DataColumn(
-                                      label: Text('On time'),
+                                      label: Text('Mosque'),
+                                    ),
+                                    DataColumn(
+                                      label: Text('OnTime'),
                                     ),
                                     DataColumn(
                                       label: Text('Delayed'),
@@ -295,6 +309,7 @@ class _PrayerScreenState extends State<PrayerScreen> {
                                   rows: _prayers.map((p) {
                                     final prayerData = data[p.key] as Map<String, dynamic>?;
                                     
+                                    final inMosque = prayerData?['inMosque'] == true;
                                     final onTime = prayerData?['onTime'] == true;
                                     final delayed = prayerData?['delayed'] == true;
 
@@ -310,12 +325,53 @@ class _PrayerScreenState extends State<PrayerScreen> {
                                         ),
                                         DataCell(
                                           Checkbox(
+                                            value: inMosque,
+                                            onChanged: (v) async {
+                                              if (v == true) {
+                                                // Checking Mosque - uncheck others
+                                                await _setPrayerStatus(
+                                                  p.key,
+                                                  inMosque: true,
+                                                  onTime: false,
+                                                  delayed: false,
+                                                );
+                                              } else {
+                                                // Unchecking Mosque - mark as missed
+                                                await _setPrayerStatus(
+                                                  p.key,
+                                                  inMosque: false,
+                                                  onTime: false,
+                                                  delayed: false,
+                                                );
+                                              }
+                                              
+                                              if (mounted) {
+                                                setState(() {});
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Checkbox(
                                             value: onTime,
                                             onChanged: (v) async {
-                                              await _setPrayerStatus(
-                                                p.key,
-                                                onTime: v,
-                                              );
+                                              if (v == true) {
+                                                // Checking OnTime - uncheck others
+                                                await _setPrayerStatus(
+                                                  p.key,
+                                                  onTime: true,
+                                                  delayed: false,
+                                                  inMosque: false,
+                                                );
+                                              } else {
+                                                // Unchecking OnTime - mark as missed
+                                                await _setPrayerStatus(
+                                                  p.key,
+                                                  onTime: false,
+                                                  delayed: false,
+                                                  inMosque: false,
+                                                );
+                                              }
                                               
                                               if (mounted) {
                                                 setState(() {});
@@ -327,10 +383,23 @@ class _PrayerScreenState extends State<PrayerScreen> {
                                           Checkbox(
                                             value: delayed,
                                             onChanged: (v) async {
-                                              await _setPrayerStatus(
-                                                p.key,
-                                                delayed: v,
-                                              );
+                                              if (v == true) {
+                                                // Checking Delayed - uncheck others
+                                                await _setPrayerStatus(
+                                                  p.key,
+                                                  delayed: true,
+                                                  onTime: false,
+                                                  inMosque: false,
+                                                );
+                                              } else {
+                                                // Unchecking Delayed - mark as missed
+                                                await _setPrayerStatus(
+                                                  p.key,
+                                                  delayed: false,
+                                                  onTime: false,
+                                                  inMosque: false,
+                                                );
+                                              }
                                               
                                               if (mounted) {
                                                 setState(() {});
@@ -351,6 +420,30 @@ class _PrayerScreenState extends State<PrayerScreen> {
                                   child: Text('No prayer times available'),
                                 ),
                               ),
+                            // Legend showing points system
+                            Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Card(
+                                color: Theme.of(context).colorScheme.surfaceContainerLowest,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Points System:',
+                                        style: Theme.of(context).textTheme.titleSmall,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text('• In Mosque: 5 points'),
+                                      const Text('• On time: 3 points'),
+                                      const Text('• Delayed: 1 point'),
+                                      const Text('• Missed: -1 point'),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         );
                       },

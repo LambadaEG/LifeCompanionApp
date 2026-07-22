@@ -1,3 +1,4 @@
+// login_screen.dart - updated
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import 'signup_screen.dart';
@@ -11,7 +12,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailCtrl = TextEditingController();
+  final _emailOrUsernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _auth = AuthService();
 
@@ -20,7 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
+    _emailOrUsernameCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
   }
@@ -30,7 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _loading = true);
     try {
       await _auth.signIn(
-        email: _emailCtrl.text,
+        emailOrUsername: _emailOrUsernameCtrl.text,
         password: _passwordCtrl.text,
       );
       // Navigation to Home happens automatically via the
@@ -43,12 +44,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _forgotPassword() async {
-    if (_emailCtrl.text.trim().isEmpty) {
-      _showError('Enter your email above first, then tap "Forgot password?".');
+    if (_emailOrUsernameCtrl.text.trim().isEmpty) {
+      _showError('Enter your email or username above first, then tap "Forgot password?".');
       return;
     }
     try {
-      await _auth.resetPassword(_emailCtrl.text);
+      await _auth.resetPassword(_emailOrUsernameCtrl.text);
       _showError('Password reset email sent.');
     } catch (e) {
       _showError(_auth.friendlyError(e));
@@ -83,15 +84,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 32),
                   TextFormField(
-                    controller: _emailCtrl,
-                    keyboardType: TextInputType.emailAddress,
+                    controller: _emailOrUsernameCtrl,
+                    keyboardType: TextInputType.text,
                     decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined),
+                      labelText: 'Email or Username',
+                      prefixIcon: Icon(Icons.person_outline),
                       border: OutlineInputBorder(),
                     ),
-                    validator: (v) => (v == null || !v.contains('@'))
-                        ? 'Enter a valid email'
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Enter your email or username'
                         : null,
                   ),
                   const SizedBox(height: 16),

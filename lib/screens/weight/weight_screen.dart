@@ -1,3 +1,4 @@
+// weight_screen.dart - with only AppBar button (no FAB)
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -122,11 +123,15 @@ class _WeightScreenState extends State<WeightScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Weight')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addOrEditWeightDialog,
-        icon: const Icon(Icons.add),
-        label: const Text('Log weight'),
+      appBar: AppBar(
+        title: const Text('Weight'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'Log weight',
+            onPressed: _addOrEditWeightDialog,
+          ),
+        ],
       ),
       body: SafeArea(
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(

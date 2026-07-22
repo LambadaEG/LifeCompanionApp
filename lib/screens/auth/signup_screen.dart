@@ -1,3 +1,4 @@
+// signup_screen.dart - updated
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/auth_service.dart';
@@ -12,6 +13,7 @@ class SignUpScreen extends StatefulWidget {
 class _SignUpScreenState extends State<SignUpScreen> {
   final _formKey = GlobalKey<FormState>();
 
+  final _usernameCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
@@ -24,6 +26,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   @override
   void dispose() {
+    _usernameCtrl.dispose();
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
@@ -42,6 +45,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     try {
       await _auth.signUp(
+        username: _usernameCtrl.text.trim(),
         name: _nameCtrl.text.trim(),
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text,
@@ -56,7 +60,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ..hideCurrentSnackBar()
           ..showSnackBar(
             SnackBar(
-              content: Text(e.message ?? 'Sign up failed'),
+              content: Text(_auth.friendlyError(e)),
             ),
           );
       }
@@ -98,6 +102,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  TextFormField(
+                    controller: _usernameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Username',
+                      prefixIcon: Icon(Icons.person),
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Enter a username';
+                      }
+                      if (v.trim().length < 3) {
+                        return 'Username must be at least 3 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
                   TextFormField(
                     controller: _nameCtrl,
                     decoration: const InputDecoration(

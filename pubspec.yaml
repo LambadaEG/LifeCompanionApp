@@ -1,4 +1,4 @@
-name: gym_app
+name: LifeCompanion
 description: Gym / Prayer / Weight tracker with Firebase Auth + Firestore.
 publish_to: 'none'
 version: 1.0.0+1

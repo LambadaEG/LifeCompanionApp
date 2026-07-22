@@ -1,3 +1,4 @@
+// main.dart - updated
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -10,16 +11,16 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const GymApp());
+  runApp(const LifeCompanionApp());
 }
 
-class GymApp extends StatelessWidget {
-  const GymApp({super.key});
+class LifeCompanionApp extends StatelessWidget {
+  const LifeCompanionApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Gym Tracker',
+      title: 'LifeCompanion',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorSchemeSeed: Colors.deepOrange,

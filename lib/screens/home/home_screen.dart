@@ -1,9 +1,11 @@
+// home_screen.dart - updated
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/square_icon_button.dart';
 import '../gym/gym_menu_screen.dart';
 import '../prayer/prayer_screen.dart';
 import '../weight/weight_screen.dart';
+import 'weekly_leaderboard_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -56,11 +58,13 @@ class HomeScreen extends StatelessWidget {
                   MaterialPageRoute(builder: (_) => const WeightScreen()),
                 ),
               ),
-              const SquareIconButton(
-                icon: Icons.hourglass_empty,
-                label: 'Coming Soon',
-                color: Colors.grey,
-                disabled: true,
+              SquareIconButton(
+                icon: Icons.leaderboard,
+                label: 'Weekly Leaderboard',
+                color: Colors.purple,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const WeeklyLeaderboardScreen()),
+                ),
               ),
             ],
           ),
