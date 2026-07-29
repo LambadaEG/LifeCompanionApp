@@ -1,8 +1,10 @@
 // weekly_leaderboard_screen.dart - updated to show all users
+import 'package:adhan_dart/adhan_dart.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:LifeCompanion/services/auth_service.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 
 class WeeklyLeaderboardScreen extends StatefulWidget {
@@ -23,6 +25,9 @@ class _WeeklyLeaderboardScreenState extends State<WeeklyLeaderboardScreen> {
   bool _debugMode = false;
   String _debugInfo = '';
   Map<String, dynamic> _debugData = {};
+  
+  // Cache for prayer times
+  Map<String, Map<String, DateTime>> _prayerTimesCache = {};
 
   // Get the week start date (Tuesday 1:00 PM)
   DateTime _getWeekStart() {
@@ -60,6 +65,7 @@ class _WeeklyLeaderboardScreenState extends State<WeeklyLeaderboardScreen> {
     setState(() => _isLoading = true);
     _debugInfo = '';
     _debugData = {};
+    _prayerTimesCache = {};
 
     try {
       final weekStart = _getWeekStart();
@@ -93,7 +99,6 @@ class _WeeklyLeaderboardScreenState extends State<WeeklyLeaderboardScreen> {
           'uid': uid,
           'gymPoints': points['gymTotal'] ?? 0,
           'prayerPoints': points['prayer'] ?? 0,
-          'weightPoints': points['weight'] ?? 0,
           'total': points['total'] ?? 0,
         });
       }
@@ -118,13 +123,73 @@ class _WeeklyLeaderboardScreenState extends State<WeeklyLeaderboardScreen> {
     }
   }
 
+  Future<Map<String, DateTime>> _getPrayerTimesForDate(DateTime date, String uid) async {
+    final dateKey = DateFormat('yyyy-MM-dd').format(date);
+    
+    // Check cache first
+    if (_prayerTimesCache.containsKey(dateKey)) {
+      return _prayerTimesCache[dateKey]!;
+    }
+    
+    try {
+      // Get user's location from their profile
+      final userDoc = await _firestore.collection('users').doc(uid).get();
+      final userData = userDoc.data();
+      
+      if (userData == null) {
+        throw Exception('User data not found');
+      }
+      
+      // Get location from user profile
+      final latitude = userData['latitude'] as double?;
+      final longitude = userData['longitude'] as double?;
+      
+      if (latitude == null || longitude == null) {
+        throw Exception('User location not set');
+      }
+      
+      final coordinates = Coordinates(latitude, longitude);
+      final params = CalculationMethodParameters.muslimWorldLeague();
+      
+      final prayerTimes = PrayerTimes(
+        coordinates: coordinates,
+        date: date,
+        calculationParameters: params,
+      );
+      
+      final prayerTimesMap = {
+        'fajr': prayerTimes.fajr,
+        'dhuhr': prayerTimes.dhuhr,
+        'asr': prayerTimes.asr,
+        'maghrib': prayerTimes.maghrib,
+        'isha': prayerTimes.isha,
+      };
+      
+      // Cache the result
+      _prayerTimesCache[dateKey] = prayerTimesMap;
+      
+      return prayerTimesMap;
+    } catch (e) {
+      // Fallback to approximate times if location not available
+      final fallbackTimes = {
+        'fajr': DateTime(date.year, date.month, date.day, 5, 0),
+        'dhuhr': DateTime(date.year, date.month, date.day, 12, 0),
+        'asr': DateTime(date.year, date.month, date.day, 15, 0),
+        'maghrib': DateTime(date.year, date.month, date.day, 18, 0),
+        'isha': DateTime(date.year, date.month, date.day, 20, 0),
+      };
+      
+      _prayerTimesCache[dateKey] = fallbackTimes;
+      return fallbackTimes;
+    }
+  }
+
   Future<Map<String, int>> _calculateUserPoints(String uid, DateTime weekStart, DateTime weekEnd) async {
     Map<String, int> points = {
       'gymRecords': 0,
       'gymDays': 0,
       'gymTotal': 0,
       'prayer': 0,
-      'weight': 0,
       'total': 0,
     };
 
@@ -241,25 +306,22 @@ class _WeeklyLeaderboardScreenState extends State<WeeklyLeaderboardScreen> {
         _debugData['gymDays'] = gymDays.toList();
       }
 
-      // 2. PRAYER POINTS
-      // Get all prayer entries for this week
-      final prayersSnapshot = await _firestore
-          .collection('users')
-          .doc(uid)
-          .collection('prayers')
-          .where(FieldPath.documentId, isGreaterThanOrEqualTo: DateFormat('yyyy-MM-dd').format(weekStart))
-          .where(FieldPath.documentId, isLessThan: DateFormat('yyyy-MM-dd').format(weekEnd))
-          .get();
-
+      // 2. PRAYER POINTS - WITH DYNAMIC PRAYER TIMES
       List<String> prayerNames = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
       
-      // Get all dates in the week range
+      // Get all dates from weekStart to today (or weekEnd if weekEnd is in the past)
       List<String> weekDates = [];
       DateTime current = weekStart;
-      while (current.isBefore(weekEnd)) {
+      final now = DateTime.now();
+      final endDate = weekEnd.isBefore(now) ? weekEnd : now;
+      
+      while (current.isBefore(endDate)) {
         weekDates.add(DateFormat('yyyy-MM-dd').format(current));
         current = current.add(const Duration(days: 1));
       }
+      
+      // For debug tracking
+      Map<String, Map<String, dynamic>> prayerDebug = {};
       
       // Process each day's prayers
       for (String date in weekDates) {
@@ -272,7 +334,42 @@ class _WeeklyLeaderboardScreenState extends State<WeeklyLeaderboardScreen> {
         
         final data = docSnapshot.data();
         
+        // Parse the date
+        final dateObj = DateTime.parse(date);
+        final isToday = DateFormat('yyyy-MM-dd').format(now) == date;
+        
+        // Get prayer times for this date
+        Map<String, DateTime> prayerTimes;
+        try {
+          prayerTimes = await _getPrayerTimesForDate(dateObj, uid);
+        } catch (e) {
+          // Fallback times if we can't get prayer times
+          prayerTimes = {
+            'fajr': DateTime(dateObj.year, dateObj.month, dateObj.day, 5, 0),
+            'dhuhr': DateTime(dateObj.year, dateObj.month, dateObj.day, 12, 0),
+            'asr': DateTime(dateObj.year, dateObj.month, dateObj.day, 15, 0),
+            'maghrib': DateTime(dateObj.year, dateObj.month, dateObj.day, 18, 0),
+            'isha': DateTime(dateObj.year, dateObj.month, dateObj.day, 20, 0),
+          };
+        }
+        
+        // For each prayer, check if it has passed
         for (String prayerName in prayerNames) {
+          // Check if this prayer has already passed for today
+          bool prayerPassed = true;
+          if (isToday) {
+            final prayerTime = prayerTimes[prayerName]!;
+            // If the prayer time hasn't passed yet, skip it
+            if (now.isBefore(prayerTime)) {
+              prayerPassed = false;
+            }
+          }
+          
+          // Only process if this prayer has passed
+          if (!prayerPassed) {
+            continue;
+          }
+          
           if (data != null && data.containsKey(prayerName)) {
             final prayerData = data[prayerName] as Map<String, dynamic>?;
             if (prayerData != null) {
@@ -280,104 +377,80 @@ class _WeeklyLeaderboardScreenState extends State<WeeklyLeaderboardScreen> {
               final delayed = prayerData['delayed'] == true;
               final inMosque = prayerData['inMosque'] == true;
 
+              // Prayer was logged - check the conditions
               if (inMosque) {
                 points['prayer'] = (points['prayer'] ?? 0) + 5;
+                if (_debugMode && uid == FirebaseAuth.instance.currentUser?.uid) {
+                  prayerDebug[date] ??= {};
+                  prayerDebug[date]![prayerName] = '🕌 In Mosque: +5';
+                }
               } else if (onTime) {
                 points['prayer'] = (points['prayer'] ?? 0) + 3;
+                if (_debugMode && uid == FirebaseAuth.instance.currentUser?.uid) {
+                  prayerDebug[date] ??= {};
+                  prayerDebug[date]![prayerName] = '⏰ On Time: +3';
+                }
               } else if (delayed) {
                 points['prayer'] = (points['prayer'] ?? 0) + 1;
-              } else {
-                points['prayer'] = (points['prayer'] ?? 0) - 1;
+                if (_debugMode && uid == FirebaseAuth.instance.currentUser?.uid) {
+                  prayerDebug[date] ??= {};
+                  prayerDebug[date]![prayerName] = '⏳ Delayed: +1';
+                }
               }
+              // If none of the above, it was missed (logged as false)
+              else {
+                points['prayer'] = (points['prayer'] ?? 0) - 1;
+                if (_debugMode && uid == FirebaseAuth.instance.currentUser?.uid) {
+                  prayerDebug[date] ??= {};
+                  prayerDebug[date]![prayerName] = '❌ Missed: -1';
+                }
+              }
+            }
+          } else {
+            // No data for this prayer on this date = MISSED
+            points['prayer'] = (points['prayer'] ?? 0) - 1;
+            if (_debugMode && uid == FirebaseAuth.instance.currentUser?.uid) {
+              prayerDebug[date] ??= {};
+              prayerDebug[date]![prayerName] = '❌ Missed (no data): -1';
             }
           }
         }
       }
 
-      // 3. WEIGHT POINTS
-      final weightSnapshot = await _firestore
-          .collection('users')
-          .doc(uid)
-          .collection('weight')
-          .where('date', isGreaterThanOrEqualTo: weekStart)
-          .where('date', isLessThan: weekEnd)
-          .orderBy('date')
-          .get();
-
-      if (weightSnapshot.docs.isNotEmpty) {
-        final firstWeight = weightSnapshot.docs.first.data()['weight'] as num?;
-        final lastWeight = weightSnapshot.docs.last.data()['weight'] as num?;
-        
-        if (firstWeight != null && lastWeight != null) {
-          final weightLost = firstWeight.toDouble() - lastWeight.toDouble();
-          if (weightLost > 0) {
-            final pointsEarned = (weightLost * 10).floor();
-            points['weight'] = (points['weight'] ?? 0) + pointsEarned;
-          }
-        }
-      }
-
-      // Calculate total points
-      points['total'] = (points['gymTotal'] ?? 0) + 
-                        (points['prayer'] ?? 0) + 
-                        (points['weight'] ?? 0);
-      
-      // Build debug info
+      // Add prayer debug info
       if (_debugMode && uid == FirebaseAuth.instance.currentUser?.uid) {
-        _debugInfo += '🏋️ GYM SUMMARY:\n';
+        _debugInfo += '🕌 PRAYER SUMMARY:\n';
         _debugInfo += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-        _debugInfo += '📅 Gym Days: ${gymDays.length} day(s)\n';
-        if (gymDays.isNotEmpty) {
-          _debugInfo += '   ${gymDays.map((d) => DateFormat('EEEE, MMM d').format(DateTime.parse(d))).join('\n   ')}\n\n';
+        
+        if (prayerDebug.isEmpty) {
+          _debugInfo += 'No prayer data available\n\n';
         } else {
-          _debugInfo += '   No gym days this week\n\n';
-        }
-        
-        _debugInfo += '📋 Exercise Progression (All Time):\n';
-        _debugInfo += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-        
-        // Group exercises by name to show progression
-        Map<String, List<Map<String, dynamic>>> exerciseGroups = {};
-        for (var ex in _debugData['exercises']) {
-          final name = ex['name'];
-          if (!exerciseGroups.containsKey(name)) {
-            exerciseGroups[name] = [];
-          }
-          exerciseGroups[name]!.add(ex);
-        }
-        
-        for (var entry in exerciseGroups.entries) {
-          final exerciseName = entry.key;
-          final sessions = entry.value;
-          
-          _debugInfo += '📌 $exerciseName:\n';
-          for (var session in sessions) {
-            _debugInfo += '   ${session['date']}: ${session['weight']}kg';
-            if (session['previousWeight'] != null) {
-              _debugInfo += ' (↑ +${session['weight'] - session['previousWeight']}kg)';
+          // Sort dates
+          final sortedDates = prayerDebug.keys.toList()..sort();
+          for (var date in sortedDates) {
+            _debugInfo += '📅 ${DateFormat('EEEE, MMM d').format(DateTime.parse(date))}:\n';
+            final prayers = prayerDebug[date]!;
+            for (var prayerName in prayerNames) {
+              if (prayers.containsKey(prayerName)) {
+                _debugInfo += '   ${prayerName.toUpperCase()}: ${prayers[prayerName]}\n';
+              }
             }
             _debugInfo += '\n';
           }
         }
-        _debugInfo += '\n';
-        
-        final recordsList = _debugData['records'] ?? [];
-        _debugInfo += '🏆 Records Broken This Week: ${recordsList.length}\n';
-        if (recordsList.isNotEmpty) {
-          for (var record in recordsList) {
-            _debugInfo += '   ✓ ${record['exercise']} (${record['date']}): ${record['oldWeight']}kg → ${record['newWeight']}kg (+${record['increase']}kg) (+2 points)\n';
-          }
-        } else {
-          _debugInfo += '   No new records this week\n';
-        }
-        _debugInfo += '\n';
+      }
+
+      // Calculate total points (gym + prayer only)
+      points['total'] = (points['gymTotal'] ?? 0) + (points['prayer'] ?? 0);
+      
+      // Build debug info
+      if (_debugMode && uid == FirebaseAuth.instance.currentUser?.uid) {
         _debugInfo += '📊 POINTS BREAKDOWN:\n';
         _debugInfo += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
         _debugInfo += '🏋️ Gym Records: ${points['gymRecords']} points\n';
         _debugInfo += '📅 Gym Days: ${points['gymDays']} points\n';
         _debugInfo += '🏋️ Gym Total: ${points['gymTotal']} points\n';
         _debugInfo += '🕌 Prayer: ${points['prayer']} points\n';
-        _debugInfo += '⚖️ Weight: ${points['weight']} points\n';
         _debugInfo += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
         _debugInfo += '⭐ TOTAL: ${points['total']} points\n';
       }
@@ -387,9 +460,7 @@ class _WeeklyLeaderboardScreenState extends State<WeeklyLeaderboardScreen> {
       if (_debugMode) {
         _debugInfo += '❌ ERROR: $e\n';
       }
-      points['total'] = (points['gymTotal'] ?? 0) + 
-                        (points['prayer'] ?? 0) + 
-                        (points['weight'] ?? 0);
+      points['total'] = (points['gymTotal'] ?? 0) + (points['prayer'] ?? 0);
       return points;
     }
   }
@@ -509,9 +580,6 @@ class _WeeklyLeaderboardScreenState extends State<WeeklyLeaderboardScreen> {
                                 label: Text('Prayer', style: TextStyle(fontWeight: FontWeight.bold)),
                               ),
                               DataColumn(
-                                label: Text('Weight', style: TextStyle(fontWeight: FontWeight.bold)),
-                              ),
-                              DataColumn(
                                 label: Text('Total', style: TextStyle(fontWeight: FontWeight.bold)),
                               ),
                             ],
@@ -601,14 +669,6 @@ class _WeeklyLeaderboardScreenState extends State<WeeklyLeaderboardScreen> {
                                   ),
                                   DataCell(
                                     Text(
-                                      '${user['weightPoints'] ?? 0}',
-                                      style: TextStyle(
-                                        color: totalPoints > 0 ? null : Colors.grey,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
                                       '$totalPoints',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
@@ -639,12 +699,12 @@ class _WeeklyLeaderboardScreenState extends State<WeeklyLeaderboardScreen> {
                             style: Theme.of(context).textTheme.titleSmall,
                           ),
                           const SizedBox(height: 4),
-                          const Text('🏋️ Gym: +2 for weight increase + 2 per gym day'),
+                          const Text('🏋️ Gym: +2 per gym day'),
+                          const Text('📈 Gym: +2 for weight increase'),
                           const Text('🕌 Prayer in Mosque: +5'),
                           const Text('⏰ Prayer on time: +3'),
                           const Text('⏳ Prayer delayed: +1'),
                           const Text('❌ Prayer missed: -1'),
-                          const Text('⚖️ Weight: +1 per 100g lost'),
                         ],
                       ),
                     ),

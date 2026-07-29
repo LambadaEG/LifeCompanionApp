@@ -1,10 +1,11 @@
-// home_screen.dart - updated
+// home_screen.dart - updated with correct import path
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/square_icon_button.dart';
 import '../gym/gym_menu_screen.dart';
 import '../prayer/prayer_screen.dart';
 import '../weight/weight_screen.dart';
+import '../money/money_screen.dart';  // Correct path: screens/money/money_screen.dart
 import 'weekly_leaderboard_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -59,8 +60,16 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
               SquareIconButton(
+                icon: Icons.attach_money,
+                label: 'Money',
+                color: Colors.green.shade700,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const MoneyScreen()),
+                ),
+              ),              
+              SquareIconButton(
                 icon: Icons.leaderboard,
-                label: 'Weekly Leaderboard',
+                label: 'Leaderboard',
                 color: Colors.purple,
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const WeeklyLeaderboardScreen()),
